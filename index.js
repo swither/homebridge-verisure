@@ -134,7 +134,20 @@ const VerisurePlatform = function(log, config, api) {
                 value: device.state==='CLOSE' ? 0 : 1,
              });
           });
-          devices = devices.concat(locks);
+          devices = devices.concat(locks); 
+       }
+
+       if (overview && overview.userTracking && overview.userTracking.users && overview.userTracking.installationStatus === 'ACTIVE' ){
+          let locks = overview.userTracking.users.filter(function(device){ return (device.status === 'ACTIVE') }).map(function(device){
+           
+            return new VerisureAccessory(log, {
+              name: getUniqueName(`${device.name}`),
+              model: 'PERSON',
+              serialNumber: device.webAccount,
+              value: device.currentLocationName==='HOME' ? 1 : 0,
+            });
+        });
+        devices = devices.concat(locks);   
        }
 
 
@@ -216,6 +229,22 @@ VerisureAccessory.prototype = {
       });
     });
   },
+
+
+  _getOccupancyDetected : function(callback) {
+    this.log(`${this.name} (${this.serialNumber}): Getting Occupancy Detected ...`);
+    const that = this;
+
+    getOverview(function(err, overview) {
+      if(err) return callback(err);
+      overview.userTracking.users.map(function(device) {
+        if(device.webAccount != that.serialNumber) return;
+        that.value = device.currentLocationName==='HOME' ? 1 : 0;
+        callback(err, that.value);
+      });
+    });
+  },
+
 
   _setSwitchValue: function(value, callback) {
     this.log(`${this.name} (${this.serialNumber}): Setting current value to "${value}"...`);
@@ -425,6 +454,14 @@ VerisureAccessory.prototype = {
       service
         .getCharacteristic(Characteristic.ContactSensorState)
         .on('get', this._getContactSensorState.bind(this));
+
+    }
+
+    if(['PERSON'].includes(this.model)) {
+      service = new Service.OccupancySensor(this.name);
+      service
+        .getCharacteristic(Characteristic.OccupancyDetected)
+        .on('get', this._getOccupancyDetected.bind(this));
 
     }
 
