@@ -19,6 +19,7 @@ const DEVICE_TYPES = {
   'SMARTCAMERA1': 'Smart Camera',
   'SMARTPLUG': 'Smart plug',
   'SMOKE2': 'Rökdetektor',
+  'SMOKE3': 'Rökdetektor',
   'VOICEBOX1': 'Directenhet'
 }
 
@@ -153,6 +154,20 @@ VerisureAccessory.prototype = {
       overview.climateValues.map(function(device) {
         if(device.deviceLabel != that.serialNumber) return;
         that.value = device.temperature;
+        callback(err, that.value);
+      });
+    });
+  },
+  
+  _getCurrentRelativeHumidity: function(callback) {
+    this.log(`${this.name} (${this.serialNumber}): Getting current relative humidity...`);
+    const that = this;
+
+    getOverview(function(err, overview) {
+      if(err) return callback(err);
+      overview.climateValues.map(function(device) {
+        if(device.deviceLabel != that.serialNumber) return;
+        that.value = device.humidity;
         callback(err, that.value);
       });
     });
@@ -307,11 +322,16 @@ VerisureAccessory.prototype = {
     ,200);
   },
   getServices: function() {
+
+    var services = [];
+
     const accessoryInformation = new Service.AccessoryInformation();
     accessoryInformation
       .setCharacteristic(Characteristic.Manufacturer, MANUFACTURER)
       .setCharacteristic(Characteristic.Model, DEVICE_TYPES[this.model] || this.model)
       .setCharacteristic(Characteristic.SerialNumber, this.serialNumber)
+
+    services.push(accessoryInformation);
 
     let service = null;
 
@@ -322,6 +342,12 @@ VerisureAccessory.prototype = {
         .on('get', this._getSwitchValue.bind(this))
         .on('set', this._setSwitchValue.bind(this))
         .value = this.value;
+    }
+
+    if (service != null)
+    {
+      services.push(service);
+      service = null;
     }
 
     if (['DOORLOCK'].includes(this.model)){
@@ -338,17 +364,42 @@ VerisureAccessory.prototype = {
       this.service = service;
     }
 
-    if(['HUMIDITY1', 'SIREN1', 'SMARTCAMERA1' ,'SMOKE2', 'VOICEBOX1'].includes(this.model)) {
+    if (service != null)
+    {
+      services.push(service);
+      service = null;
+    }
+
+    if(['HUMIDITY1', 'SIREN1', 'SMARTCAMERA1' ,'SMOKE2', 'SMOKE3', 'VOICEBOX1'].includes(this.model)) {
       service = new Service.TemperatureSensor(this.name);
       service
         .getCharacteristic(Characteristic.CurrentTemperature)
         .on('get', this._getCurrentTemperature.bind(this));
     }
 
-    if(!service) {
+    if (service != null)
+    {
+      services.push(service);
+      service = null;
+    }
+
+    if(['SMOKE3'].includes(this.model)) {
+      service = new Service.HumiditySensor(this.name);
+      service
+        .getCharacteristic(Characteristic.CurrentRelativeHumidity)
+        .on('get', this._getCurrentRelativeHumidity.bind(this));
+    }
+
+    if (service != null)
+    {
+      services.push(service);
+      service = null;
+    }
+
+    if(services.length == 1) {
       this.log.error(`Device ${this.model} is not yet supported`);
     }
 
-    return [accessoryInformation, service]
+    return services;
   }
 }
