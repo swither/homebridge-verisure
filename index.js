@@ -150,6 +150,15 @@ const VerisurePlatform = function(log, config, api) {
         devices = devices.concat(locks);   
        }
 
+      if (overview.armState)  {
+        devices.push(new VerisureAccessory(log, {
+          name: getUniqueName(`ALARM`),
+          model: 'ALARM',
+          serialNumber: 'ALARM',
+          value: overview.armState.statusType==='DISARMED' ? Characteristic.SecuritySystemCurrentState.DISARMED : (overview.armState.statusType==='ARMED_HOME' ? Characteristic.SecuritySystemCurrentState.NIGHT_ARM : Characteristic.SecuritySystemCurrentState.AWAY_ARM),
+        }))
+      
+      }
 
         callback(devices);
       });
@@ -242,6 +251,20 @@ VerisureAccessory.prototype = {
         that.value = device.currentLocationName==='HOME' ? 1 : 0;
         callback(err, that.value);
       });
+    });
+  },
+
+
+  _getSecuritySystemCurrentState: function(callback) {
+    this.log(`${this.name} (${this.serialNumber}): Getting alarm state ...`);
+    const that = this;
+
+    getOverview(function(err, overview) {
+      if(err) return callback(err);
+
+      that.value = overview.armState.statusType==='DISARMED' ? Characteristic.SecuritySystemCurrentState.DISARMED : (overview.armState.statusType==='ARMED_HOME' ? Characteristic.SecuritySystemCurrentState.NIGHT_ARM : Characteristic.SecuritySystemCurrentState.AWAY_ARM);
+      callback(err, that.value);
+
     });
   },
 
@@ -464,6 +487,16 @@ VerisureAccessory.prototype = {
         .on('get', this._getOccupancyDetected.bind(this));
 
     }
+
+    if(['ALARM'].includes(this.model)) {
+      service = new Service.SecuritySystem (this.name);
+      service
+        .getCharacteristic(Characteristic.SecuritySystemCurrentState)
+        .on('get', this._getSecuritySystemCurrentState.bind(this));
+
+    }
+
+   
 
     if (service != null)
     {
