@@ -125,6 +125,19 @@ const VerisurePlatform = function(log, config, api) {
            devices = devices.concat(locks);
         }
 
+        if (overview && overview.doorWindow && overview.doorWindow.doorWindowDevice){
+          let locks = overview.doorWindow.doorWindowDevice.map(function(device){
+             return new VerisureAccessory(log, {
+                name: getUniqueName(`${device.area}`),
+                model: 'DOORWINDOW',
+                serialNumber: device.deviceLabel,
+                value: device.state==='CLOSE' ? 0 : 1,
+             });
+          });
+          devices = devices.concat(locks);
+       }
+
+
         callback(devices);
       });
     })
@@ -158,6 +171,8 @@ VerisureAccessory.prototype = {
       });
     });
   },
+
+  
   
   _getCurrentRelativeHumidity: function(callback) {
     this.log(`${this.name} (${this.serialNumber}): Getting current relative humidity...`);
@@ -171,7 +186,22 @@ VerisureAccessory.prototype = {
         callback(err, that.value);
       });
     });
-	},
+  },
+  
+  _getContactSensorState: function(callback) {
+    this.log(`${this.name} (${this.serialNumber}): Getting Contact Sensor State...`);
+    const that = this;
+
+    getOverview(function(err, overview) {
+      if(err) return callback(err);
+      overview.doorWindow.doorWindowDevice.map(function(device) {
+        if(device.deviceLabel != that.serialNumber) return;
+        that.value = device.state==='CLOSE' ? 0 : 1;
+        callback(err, that.value);
+      });
+    });
+  },
+
 
   _getSwitchValue: function(callback) {
     this.log(`${this.name} (${this.serialNumber}): Getting current value...`);
@@ -388,6 +418,14 @@ VerisureAccessory.prototype = {
       service
         .getCharacteristic(Characteristic.CurrentRelativeHumidity)
         .on('get', this._getCurrentRelativeHumidity.bind(this));
+    }
+
+    if(['DOORWINDOW'].includes(this.model)) {
+      service = new Service.ContactSensor (this.name);
+      service
+        .getCharacteristic(Characteristic.ContactSensorState)
+        .on('get', this._getContactSensorState.bind(this));
+
     }
 
     if (service != null)
